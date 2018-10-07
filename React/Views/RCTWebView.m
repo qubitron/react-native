@@ -31,6 +31,31 @@ static NSString *const kPostMessageHost = @"postMessage";
 
 @end
 
+@interface WebViewCustomURLProtocol : NSURLProtocol
+@end
+
+static NSMutableDictionary *webViewRequestMap = nil;
+@implementation WebViewCustomURLProtocol 
++(void)load
+{
+    webViewRequestMap = [[NSMutableDictionary alloc] init];
+     [NSURLProtocol registerClass:self];
+}
+
++ (BOOL)canInitWithRequest:(NSURLRequest *)request
+{
+    NSString* urlString = request.URL.absoluteString;
+    NSDictionary *headers = webViewRequestMap[urlString];
+    if (headers && [request isKindOfClass:[NSMutableURLRequest class]]) {
+      for (id key in headers) {
+        [(id)request setValue:headers[key] forHTTPHeaderField:key];
+      }
+      [webViewRequestMap removeObjectForKey:urlString];
+    }
+    return NO;
+}
+@end
+
 @implementation RCTWebView
 {
   UIWebView *_webView;
@@ -202,6 +227,17 @@ RCT_NOT_IMPLEMENTED(- (instancetype)initWithCoder:(NSCoder *)aDecoder)
 - (BOOL)webView:(__unused UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request
  navigationType:(UIWebViewNavigationType)navigationType
 {
+  // Set headers on all requests with hosts matching headerHosts
+  NSArray *headerHosts = _source[@"sendHeadersToHosts"];
+  if (headerHosts) {
+    for (NSString *host in headerHosts) {
+      if ([request.URL.host containsString:host]) {
+        [webViewRequestMap setObject:_source[@"headers"] forKey:request.URL.absoluteString];
+        break;
+      }
+    }
+  }
+
   BOOL isJSNavigation = [request.URL.scheme isEqualToString:RCTJSNavigationScheme];
 
   static NSDictionary<NSNumber *, NSString *> *navigationTypes;
